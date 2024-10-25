@@ -25,15 +25,16 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-require "tebako/build_helpers"
+require "tebako/error"
+require "tebako/ruby_version"
 
 # rubocop:disable Metrics/BlockLength
 
 RSpec.describe Tebako::RubyVersion do
   describe "#initialize" do
     it "initializes with a valid version string" do
-      version = Tebako::RubyVersion.new("3.1.0")
-      expect(version.instance_variable_get(:@ruby_ver)).to eq("3.1.0")
+      version = Tebako::RubyVersion.new("3.1.6")
+      expect(version.instance_variable_get(:@ruby_version)).to eq("3.1.6")
     end
 
     it "raises an error with an invalid version string" do
@@ -48,10 +49,9 @@ RSpec.describe Tebako::RubyVersion do
       end.to raise_error(Tebako::Error, "Invalid Ruby version format ''. Expected format: x.y.z")
     end
 
-    it "raises an error with a nil version string" do
-      expect do
-        Tebako::RubyVersion.new(nil)
-      end.to raise_error(Tebako::Error, "Invalid Ruby version format ''. Expected format: x.y.z")
+    it "uses default version a nil version string" do
+      version = Tebako::RubyVersion.new(nil)
+      expect(version.ruby_version).to eq(Tebako::RubyVersion::DEFAULT_RUBY_VERSION)
     end
   end
 
@@ -120,8 +120,8 @@ RSpec.describe Tebako::RubyVersion do
       end
     end
 
-    context "with version 3.3.0" do
-      let(:version) { Tebako::RubyVersion.new("3.3.0") }
+    context "with version 3.3.5" do
+      let(:version) { Tebako::RubyVersion.new("3.3.5") }
 
       it "returns true for ruby3x?" do
         expect(version.ruby3x?).to be true
@@ -181,6 +181,60 @@ RSpec.describe Tebako::RubyVersion do
 
       it "returns '270' for lib_version" do
         expect(version.lib_version).to eq("270")
+      end
+    end
+  end
+
+  describe "#version_check" do
+    context "when the Ruby version is supported" do
+      let(:version) { Tebako::RubyVersion.new("3.2.5") }
+      it "does not raise an error" do
+        expect { version.version_check }.not_to raise_error
+      end
+    end
+
+    context "when the Ruby version is not supported" do
+      let(:version) { Tebako::RubyVersion.new("2.6.0") }
+      it "raises a Tebako::Error" do
+        expect do
+          version.version_check("2.6.0")
+        end.to raise_error(Tebako::Error, "Ruby version 2.6.0 is not supported")
+      end
+    end
+  end
+
+  describe "DEFAULT_RUBY_VERSION" do
+    it "is set to 3.2.5" do
+      expect(Tebako::RubyVersion::DEFAULT_RUBY_VERSION).to eq("3.2.5")
+    end
+  end
+
+  describe "#version_check_msys" do
+    let(:min_ruby_version_windows) { Gem::Version.new(Tebako::CliRubies::MIN_RUBY_VERSION_WINDOWS) }
+
+    context "when version is below minimum on Windows" do
+      let(:version) { Tebako::RubyVersion.new("3.0.7") }
+      it "raises a Tebako::Error" do
+        stub_const("RUBY_PLATFORM", "msys")
+        expect do
+          version.version_check_msys
+        end.to raise_error(Tebako::Error, "Ruby version 3.0.7 is not supported on Windows")
+      end
+    end
+
+    context "when version is minimum on Windows" do
+      let(:version) { Tebako::RubyVersion.new("3.1.6") }
+      it "does not raise an error" do
+        stub_const("RUBY_PLATFORM", "msys")
+        expect { version.version_check_msys }.not_to raise_error
+      end
+    end
+
+    context "when version is above minimum on Windows" do
+      let(:version) { Tebako::RubyVersion.new("3.2.5") }
+      it "does not raise an error" do
+        stub_const("RUBY_PLATFORM", "msys")
+        expect { version.version_check_msys }.not_to raise_error
       end
     end
   end
